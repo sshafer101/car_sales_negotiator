@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: car-sales-negotiator
+Version: 0.1.0
+Summary: Deterministic car sales negotiation simulator showcasing persona_engine
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: streamlit>=1.52.0
+Requires-Dist: pandas>=2.3.0
+Requires-Dist: openai>=1.0.0

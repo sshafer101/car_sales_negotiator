@@ -1,0 +1,22 @@
+[
+  {
+    "value": "payment_focused_skeptical",
+    "weight": 4
+  },
+  {
+    "value": "feature_focused_picky",
+    "weight": 3
+  },
+  {
+    "value": "trust_sensitive_needs_transparency",
+    "weight": 4
+  },
+  {
+    "value": "conflict_avoidant_wants_to_think",
+    "weight": 3
+  },
+  {
+    "value": "hard_anchor_compares_competitors",
+    "weight": 2
+  }
+]

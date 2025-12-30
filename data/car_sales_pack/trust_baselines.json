@@ -1,0 +1,5 @@
+[
+  {"value": "high_trust", "weight": 2},
+  {"value": "neutral", "weight": 5},
+  {"value": "low_trust", "weight": 3}
+]

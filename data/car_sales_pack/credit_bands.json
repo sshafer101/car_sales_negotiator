@@ -1,0 +1,7 @@
+[
+  {"value": "poor", "weight": 2},
+  {"value": "fair", "weight": 4},
+  {"value": "good", "weight": 5},
+  {"value": "very_good", "weight": 3},
+  {"value": "excellent", "weight": 2}
+]

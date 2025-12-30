@@ -1,0 +1,8 @@
+[
+  {"value": "anchors_low_initial_offer", "weight": 3},
+  {"value": "asks_for_fee_breakdown", "weight": 5},
+  {"value": "mentions_competitor_quote", "weight": 3},
+  {"value": "pushes_for_add_ons_removed", "weight": 2},
+  {"value": "wants_warranty_included", "weight": 2},
+  {"value": "focuses_on_out_the_door_only", "weight": 4}
+]

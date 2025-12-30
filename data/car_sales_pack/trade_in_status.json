@@ -1,0 +1,6 @@
+[
+  {"value": "no_trade", "weight": 4},
+  {"value": "trade_paid_off", "weight": 3},
+  {"value": "trade_has_loan_positive_equity", "weight": 2},
+  {"value": "trade_has_loan_negative_equity", "weight": 2}
+]

@@ -1,0 +1,7 @@
+[
+  {"value": "schedule_follow_up_appointment", "weight": 4},
+  {"value": "send_two_options_with_transparent_pricing", "weight": 5},
+  {"value": "refer_to_credit_union_or_preapproval", "weight": 2},
+  {"value": "recommend_wait_and_save_down_payment", "weight": 2},
+  {"value": "offer_vehicle_alert_list", "weight": 3}
+]

@@ -1,0 +1,12 @@
+
+# secrets
+.streamlit/secrets.toml
+
+# local environments
+.venv/
+__pycache__/
+*.pyc
+
+# local run artifacts
+runs/
+exports/

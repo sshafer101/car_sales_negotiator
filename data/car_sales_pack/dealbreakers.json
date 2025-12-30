@@ -1,0 +1,8 @@
+[
+  {"value": "no_salvage_or_rebuilt_title", "weight": 6},
+  {"value": "no_high_pressure_sales", "weight": 5},
+  {"value": "no_hidden_fees", "weight": 5},
+  {"value": "no_long_term_loan_over_72_months", "weight": 3},
+  {"value": "no_leasing", "weight": 2},
+  {"value": "must_allow_pre_purchase_inspection", "weight": 3}
+]

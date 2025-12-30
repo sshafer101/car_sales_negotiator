@@ -1,0 +1,6 @@
+[
+  {"value": "just_browsing", "weight": 3},
+  {"value": "needs_within_2_weeks", "weight": 4},
+  {"value": "needs_this_week", "weight": 3},
+  {"value": "needs_today", "weight": 2}
+]

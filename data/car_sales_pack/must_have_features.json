@@ -1,0 +1,10 @@
+[
+  {"value": "reliable_low_maintenance", "weight": 6},
+  {"value": "third_row_seating", "weight": 2},
+  {"value": "awd_or_4wd", "weight": 3},
+  {"value": "good_mpg", "weight": 5},
+  {"value": "advanced_safety_features", "weight": 4},
+  {"value": "apple_carplay_android_auto", "weight": 4},
+  {"value": "tow_package", "weight": 1},
+  {"value": "premium_audio", "weight": 1}
+]

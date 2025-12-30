@@ -1,0 +1,8 @@
+[
+  {"value": 0, "weight": 2},
+  {"value": 1000, "weight": 3},
+  {"value": 2500, "weight": 4},
+  {"value": 5000, "weight": 3},
+  {"value": 8000, "weight": 2},
+  {"value": 12000, "weight": 1}
+]

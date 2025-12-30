@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "car-sales-negotiator"
+version = "0.1.0"
+description = "Deterministic car sales negotiation simulator showcasing persona_engine"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "streamlit>=1.52.0",
+  "pandas>=2.3.0",
+  "openai>=1.0.0"
+]
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["engine*"]
+
