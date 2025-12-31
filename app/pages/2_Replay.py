@@ -1,34 +1,110 @@
+from __future__ import annotations
+
+import json
+from typing import Any, Dict, List
+
 import streamlit as st
-from engine.storage import list_runs
+
+from app._auth import require_login, require_paid
+from engine.storage import list_runs, load_run
+
+
+st.set_page_config(page_title="Replay", page_icon="📼", layout="wide")
 
 st.title("Replay")
 
-runs = list_runs(limit=200)
-if not runs:
-    st.info("No runs saved yet.")
+if not require_login():
+    st.stop()
+if not require_paid():
     st.stop()
 
-options = [(r["run_id"], r.get("seed"), r.get("created_at"), r.get("run_key")) for r in runs]
-label_map = {rid: f"{rid} | seed={seed} | {created_at}" for rid, seed, created_at, _ in options}
 
-chosen = st.selectbox("Select a run", [rid for rid, _, _, _ in options], format_func=lambda x: label_map[x])
-run = next(r for r in runs if r["run_id"] == chosen)
+def _safe_list_runs(limit: int = 200) -> List[Dict[str, Any]]:
+    try:
+        return list_runs(limit=limit) or []
+    except Exception:
+        return []
 
-st.subheader("Run identity")
-st.write(f"Seed: {run.get('seed')}")
-st.write(f"Run key: {run.get('run_key')}")
-st.write(f"Buyer profile hash: {run.get('buyer_profile_hash')}")
-st.write(f"Pack hash: {run.get('pack_hash')}")
 
-st.subheader("Buyer profile")
-st.json(run.get("buyer_profile"))
+def _run_summary_row(r: Dict[str, Any]) -> Dict[str, Any]:
+    score = r.get("score") or {}
+    total = score.get("total")
+    return {
+        "run_id": r.get("run_id"),
+        "seed": r.get("seed"),
+        "mode": r.get("mode"),
+        "created_at": str(r.get("created_at", ""))[:19],
+        "total_score": total if total is not None else "",
+        "buyer_profile_hash": r.get("buyer_profile_hash", ""),
+    }
+
+
+runs = _safe_list_runs(limit=250)
+
+with st.sidebar:
+    st.header("Filters")
+    seed_filter = st.text_input("Seed (optional)", value="")
+    mode_filter = st.selectbox("Mode", options=["any", "strict", "flavor"], index=0)
+    limit = st.slider("Max runs", min_value=25, max_value=250, value=100, step=25)
+
+filtered: List[Dict[str, Any]] = []
+for r in runs:
+    if seed_filter.strip():
+        if str(r.get("seed", "")) != seed_filter.strip():
+            continue
+    if mode_filter != "any":
+        if str(r.get("mode", "")) != mode_filter:
+            continue
+    filtered.append(r)
+
+filtered = filtered[: int(limit)]
+
+st.subheader("Runs")
+summary_rows = [_run_summary_row(r) for r in filtered]
+st.dataframe(summary_rows, use_container_width=True, hide_index=True)
+
+st.divider()
+st.subheader("Open a run")
+
+run_ids = [str(r.get("run_id")) for r in filtered if r.get("run_id")]
+selected = st.selectbox("Run", options=run_ids) if run_ids else None
+
+if not selected:
+    st.info("No runs match the filters.")
+    st.stop()
+
+payload = load_run(selected)
+
+col1, col2 = st.columns([2, 1])
+with col1:
+    st.caption(
+        f"seed={payload.get('seed')}  run_id={payload.get('run_id')}  run_key={payload.get('run_key')}  "
+        f"buyer_profile_hash={payload.get('buyer_profile_hash')}"
+    )
+with col2:
+    st.download_button(
+        label="Download run JSON",
+        data=json.dumps(payload, indent=2, sort_keys=True),
+        file_name=f"run_{payload.get('run_id','unknown')}.json",
+        mime="application/json",
+        use_container_width=True,
+    )
 
 st.subheader("Conversation")
-for t in run.get("session", {}).get("turns", []):
-    if t.get("seller"):
-        st.markdown(f"**You:** {t['seller']}")
-    st.markdown(f"**Customer:** {t['customer']}")
-    st.write("")
+session = payload.get("session") or {}
+turns = session.get("turns") or []
 
-st.subheader("Score")
-st.json(run.get("score"))
+chat_box = st.container(height=520, border=True)
+with chat_box:
+    for t in turns:
+        customer = (t.get("customer") or "").strip()
+        seller = (t.get("seller") or "").strip()
+        if customer:
+            with st.chat_message("assistant"):
+                st.markdown(customer)
+        if seller:
+            with st.chat_message("user"):
+                st.markdown(seller)
+
+with st.expander("Score", expanded=False):
+    st.json(payload.get("score") or {})
