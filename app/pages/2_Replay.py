@@ -1,3 +1,4 @@
+# app/pages/2_Replay.py
 from __future__ import annotations
 
 import json
@@ -19,16 +20,18 @@ if not require_paid():
     st.stop()
 
 
-def _safe_list_runs(limit: int = 200) -> List[Dict[str, Any]]:
+def _safe_list_runs(limit: int = 250) -> List[Dict[str, Any]]:
     try:
-        return list_runs(limit=limit) or []
+        return list_runs(limit=limit)
     except Exception:
         return []
 
 
 def _run_summary_row(r: Dict[str, Any]) -> Dict[str, Any]:
     score = r.get("score") or {}
-    total = score.get("total")
+    total = None
+    if isinstance(score, dict):
+        total = score.get("total")
     return {
         "run_id": r.get("run_id"),
         "seed": r.get("seed"),
@@ -44,7 +47,7 @@ runs = _safe_list_runs(limit=250)
 with st.sidebar:
     st.header("Filters")
     seed_filter = st.text_input("Seed (optional)", value="")
-    mode_filter = st.selectbox("Mode", options=["any", "strict", "flavor"], index=0)
+    mode_filter = st.selectbox("Mode", options=["any", "strict", "freeplay", "flavor"], index=0)
     limit = st.slider("Max runs", min_value=25, max_value=250, value=100, step=25)
 
 filtered: List[Dict[str, Any]] = []
@@ -70,7 +73,6 @@ run_ids = [str(r.get("run_id")) for r in filtered if r.get("run_id")]
 selected = st.selectbox("Run", options=run_ids) if run_ids else None
 
 if not selected:
-    st.info("No runs match the filters.")
     st.stop()
 
 payload = load_run(selected)
@@ -97,14 +99,14 @@ turns = session.get("turns") or []
 chat_box = st.container(height=520, border=True)
 with chat_box:
     for t in turns:
-        customer = (t.get("customer") or "").strip()
         seller = (t.get("seller") or "").strip()
-        if customer:
-            with st.chat_message("assistant"):
-                st.markdown(customer)
+        customer = (t.get("customer") or "").strip()
         if seller:
             with st.chat_message("user"):
                 st.markdown(seller)
+        if customer:
+            with st.chat_message("assistant"):
+                st.markdown(customer)
 
-with st.expander("Score", expanded=False):
-    st.json(payload.get("score") or {})
+st.subheader("Buyer profile")
+st.json(payload.get("buyer_profile") or {})

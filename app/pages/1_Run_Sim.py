@@ -1,3 +1,4 @@
+# app/pages/1_Run_Sim.py
 from __future__ import annotations
 
 import os
@@ -18,48 +19,19 @@ def _ensure() -> None:
         st.session_state.active_run_id = None
     if "active_payload" not in st.session_state:
         st.session_state.active_payload = None
-
-
-def _project_root() -> str:
-    return os.getcwd()
-
-
-def _default_pack_dir() -> str:
-    return os.path.join(_project_root(), "data", "car_sales_pack")
+    if "seed" not in st.session_state:
+        st.session_state.seed = "18422"
+    if "show_profile" not in st.session_state:
+        st.session_state.show_profile = False
+    if "show_tags" not in st.session_state:
+        st.session_state.show_tags = False
 
 
 def _safe_list_runs(limit: int = 75) -> List[Dict[str, Any]]:
     try:
-        return list_runs(limit=limit) or []
+        return list_runs(limit=limit)
     except Exception:
         return []
-
-
-def _load_active_payload() -> Dict[str, Any] | None:
-    rid = st.session_state.active_run_id
-    if not rid:
-        return None
-    try:
-        return load_run(rid)
-    except Exception:
-        return None
-
-
-def _render_chat(payload: Dict[str, Any]) -> None:
-    session = payload.get("session") or {}
-    turns = session.get("turns") or []
-
-    chat_box = st.container(height=520, border=True)
-    with chat_box:
-        for t in turns:
-            customer = (t.get("customer") or "").strip()
-            seller = (t.get("seller") or "").strip()
-            if customer:
-                with st.chat_message("assistant"):
-                    st.markdown(customer)
-            if seller:
-                with st.chat_message("user"):
-                    st.markdown(seller)
 
 
 def _start_new_run(seed: int, pack_dir: str, mode: str, llm_model: str, reference_k: int) -> Dict[str, Any]:
@@ -69,7 +41,7 @@ def _start_new_run(seed: int, pack_dir: str, mode: str, llm_model: str, referenc
         overrides={},
         mode=mode,
         llm_model=llm_model,
-        reference_k=reference_k,
+        reference_k=reference_k if mode == "flavor" else 0,
     )
     st.session_state.active_run_id = run_id
     st.session_state.active_payload = payload
@@ -86,131 +58,165 @@ def _set_active_run(run_id: str) -> Dict[str, Any] | None:
     return payload
 
 
-def _download_payload(payload: Dict[str, Any]) -> None:
-    import json
-
-    st.download_button(
-        label="Download run JSON",
-        data=json.dumps(payload, indent=2, sort_keys=True),
-        file_name=f"run_{payload.get('run_id','unknown')}.json",
-        mime="application/json",
-        use_container_width=True,
-    )
+def _count_llm_fallbacks(turns: List[Dict[str, Any]]) -> int:
+    n = 0
+    for t in turns:
+        tags = t.get("tags") or []
+        for tag in tags:
+            if isinstance(tag, str) and tag.startswith("llm_fallback:"):
+                n += 1
+    return n
 
 
-_ensure()
+def _last_llm_fallback_reason(turns: List[Dict[str, Any]]) -> str:
+    for t in reversed(turns):
+        tags = t.get("tags") or []
+        for tag in tags:
+            if isinstance(tag, str) and tag.startswith("llm_fallback:"):
+                return tag.replace("llm_fallback:", "", 1)
+    return ""
 
-st.title("Run Sim")
 
-if not require_login():
-    st.stop()
-if not require_paid():
-    st.stop()
+def _render_chat(payload: Dict[str, Any]) -> None:
+    session = payload.get("session") or {}
+    turns = session.get("turns") or []
 
-with st.sidebar:
-    st.header("Controls")
+    mode = str((payload.get("mode") or session.get("mode") or "strict")).strip()
 
-    user = st.session_state.get("user") or {}
-    st.caption(f"User: {user.get('email','unknown')}")
-    st.caption("Paid: yes")
+    fallbacks = _count_llm_fallbacks(turns)
+    if mode in ("freeplay", "flavor"):
+        if fallbacks:
+            reason = _last_llm_fallback_reason(turns)
+            st.warning(f"LLM fallback occurred {fallbacks} time(s). Last reason: {reason}")
+        else:
+            st.success("LLM active (no fallback tags detected).")
+    else:
+        st.info("Strict mode active (no LLM).")
 
-    st.divider()
-    st.subheader("Run settings")
+    chat_box = st.container(height=520, border=True)
+    with chat_box:
+        for t in turns:
+            seller = (t.get("seller") or "").strip()
+            customer = (t.get("customer") or "").strip()
+            tags = t.get("tags") or []
 
-    seed = st.number_input("Seed", min_value=0, max_value=99999999, value=18422, step=1)
+            if seller:
+                with st.chat_message("user"):
+                    st.markdown(seller)
 
-    pack_dir = st.text_input("Pack dir", value=_default_pack_dir())
+            if customer:
+                with st.chat_message("assistant"):
+                    st.markdown(customer)
+                    if st.session_state.show_tags and tags:
+                        st.caption(f"tags: {tags}")
 
-    mode = st.selectbox("Mode", options=["strict", "flavor"], index=1)
 
-    llm_model = st.text_input("LLM model", value="gpt-5.2")
+def _render_controls() -> Dict[str, Any]:
+    with st.sidebar:
+        st.header("Controls")
 
-    reference_k = st.slider("Reference runs (flavor)", min_value=0, max_value=6, value=3, step=1)
+        pack_dir = "data/car_sales_pack"
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        if st.button("Start new run", use_container_width=True):
-            _start_new_run(int(seed), pack_dir, mode, llm_model.strip(), int(reference_k))
-            st.rerun()
-    with col_b:
-        if st.button("Reset active", use_container_width=True):
-            st.session_state.active_run_id = None
-            st.session_state.active_payload = None
-            st.rerun()
+        seed = st.text_input("Seed", value=st.session_state.seed)
+        st.session_state.seed = seed
 
-    st.divider()
-    st.subheader("Run selector")
+        mode = st.selectbox("Mode", options=["strict", "freeplay", "flavor"], index=2)
+        llm_model = st.text_input("LLM model", value="gpt-5.2")
+        reference_k = st.slider("Reference runs (flavor mode)", min_value=0, max_value=6, value=3, step=1)
 
-    runs = _safe_list_runs(limit=75)
-    run_options: List[str] = []
-    run_labels: Dict[str, str] = {}
+        st.session_state.show_tags = st.toggle("Show turn tags (debug)", value=st.session_state.show_tags)
 
-    for r in runs:
-        rid = str(r.get("run_id", "")).strip()
-        if not rid:
-            continue
-        s = r.get("seed", "")
-        m = r.get("mode", "")
-        created = str(r.get("created_at", ""))[:19]
-        label = f"{rid[:8]}  seed={s}  {m}  {created}"
-        run_options.append(rid)
-        run_labels[rid] = label
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("Start new run", use_container_width=True):
+                _start_new_run(int(seed), pack_dir, mode, llm_model.strip(), int(reference_k))
+                st.rerun()
+        with col_b:
+            if st.button("Reset active", use_container_width=True):
+                st.session_state.active_run_id = None
+                st.session_state.active_payload = None
+                st.rerun()
 
-    if run_options:
+        st.divider()
+        st.subheader("Run selector")
+
+        runs = _safe_list_runs(limit=75)
+        run_options: List[str] = []
+        run_labels: Dict[str, str] = {}
+
+        for r in runs:
+            rid = str(r.get("run_id", "")).strip()
+            if not rid:
+                continue
+            s = r.get("seed", "")
+            m = r.get("mode", "")
+            created = str(r.get("created_at", ""))[:19]
+            label = f"{rid[:8]}  seed={s}  {m}  {created}"
+            run_options.append(rid)
+            run_labels[rid] = label
+
         selected = st.selectbox(
-            "Select run",
-            options=run_options,
-            format_func=lambda rid: run_labels.get(rid, rid),
-            index=0,
+            "Open run",
+            options=[""] + run_options,
+            format_func=lambda x: "Select a run" if x == "" else run_labels.get(x, x),
         )
-        if st.button("Load selected", use_container_width=True):
+        if selected:
             _set_active_run(selected)
             st.rerun()
-    else:
-        st.caption("No runs yet.")
 
-payload = st.session_state.active_payload or _load_active_payload()
+    return {"pack_dir": pack_dir}
 
-if not payload:
-    st.info("Start a new run to begin.")
-    st.stop()
 
-seed_val = payload.get("seed")
-run_id = payload.get("run_id")
-run_key = payload.get("run_key")
-bp_hash = payload.get("buyer_profile_hash")
-ref_hash = payload.get("reference_set_hash", "")
+def _maybe_load_openai_key_from_secrets() -> None:
+    # Optional convenience: load st.secrets into env for OpenAI SDK
+    if "OPENAI_API_KEY" in st.secrets and not os.environ.get("OPENAI_API_KEY"):
+        os.environ["OPENAI_API_KEY"] = str(st.secrets["OPENAI_API_KEY"])
 
-st.caption(f"seed={seed_val}  run_id={run_id}  run_key={run_key}  buyer_profile_hash={bp_hash}  ref_hash={ref_hash}")
 
-col_top1, col_top2, col_top3 = st.columns([2, 1, 1])
-with col_top1:
-    st.text_input("Share seed", value=str(seed_val), label_visibility="visible")
-with col_top2:
-    st.text_input("Share run_id", value=str(run_id), label_visibility="visible")
-with col_top3:
-    st.page_link("app/pages/2_Replay.py", label="Open Replay", icon="📼", use_container_width=True)
+def main() -> None:
+    _ensure()
 
-_render_chat(payload)
+    if not require_login():
+        st.stop()
+    if not require_paid():
+        st.stop()
 
-seller_text = st.chat_input("Type your message and press Enter")
-if seller_text:
-    payload = step_run(payload, seller_text.strip())
-    save_run(payload["run_id"], payload)
-    st.session_state.active_payload = payload
-    st.rerun()
+    _maybe_load_openai_key_from_secrets()
 
-with st.expander("Export", expanded=False):
-    _download_payload(payload)
+    st.title("Run Sim")
 
-with st.expander("Score", expanded=False):
-    st.json(payload.get("score") or {})
+    _render_controls()
 
-with st.expander("Debug", expanded=False):
-    st.json(
-        {
-            "reference_set": payload.get("reference_set"),
-            "llm_cache_size": len(payload.get("llm_cache") or {}),
-            "controller_state": payload.get("controller_state"),
-        }
+    payload = st.session_state.active_payload
+    if not payload:
+        st.info("Start a new run from the sidebar.")
+        st.stop()
+
+    run_id = st.session_state.active_run_id
+    st.caption(
+        f"seed={payload.get('seed')} run_id={run_id} run_key={payload.get('run_key')} "
+        f"buyer_profile_hash={payload.get('buyer_profile_hash')} ref_hash={payload.get('reference_set_hash')}"
     )
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.page_link("pages/2_Replay.py", label="Open Replay", icon="📼", use_container_width=True)
+    with col2:
+        st.button("Share seed", use_container_width=True, disabled=True)
+    with col3:
+        st.button("Share run_id", use_container_width=True, disabled=True)
+
+    st.divider()
+
+    _render_chat(payload)
+
+    seller_text = st.chat_input("Type your next message and press Enter")
+    if seller_text:
+        payload = step_run(payload, seller_text.strip())
+        st.session_state.active_payload = payload
+        if run_id:
+            save_run(run_id, payload)
+        st.rerun()
+
+
+main()

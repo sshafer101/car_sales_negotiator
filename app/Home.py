@@ -8,13 +8,13 @@ st.write("Replay the same seed to get the same buyer persona and consistent buye
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.page_link("app/pages/0_Login.py", label="Login", icon="🔐", use_container_width=True)
+    st.page_link("pages/0_Login.py", label="Login", icon="🔐", use_container_width=True)
 with col2:
-    st.page_link("app/pages/3_Billing.py", label="Billing", icon="💳", use_container_width=True)
+    st.page_link("pages/3_Billing.py", label="Billing", icon="💳", use_container_width=True)
 with col3:
-    st.page_link("app/pages/1_Run_Sim.py", label="Run Sim", icon="🧪", use_container_width=True)
+    st.page_link("pages/1_Run_Sim.py", label="Run Sim", icon="🧪", use_container_width=True)
 with col4:
-    st.page_link("app/pages/2_Replay.py", label="Replay", icon="📼", use_container_width=True)
+    st.page_link("pages/2_Replay.py", label="Replay", icon="📼", use_container_width=True)
 
 st.divider()
 st.subheader("Fast demo")
