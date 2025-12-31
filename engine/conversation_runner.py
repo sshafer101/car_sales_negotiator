@@ -12,8 +12,8 @@ from .conversation import new_session, step_session, session_to_dict, SessionSta
 from .scoring import score_session, score_to_dict
 from .utils import stable_hash, to_jsonable
 from .storage import save_run
-from .llm_client import customer_reply_llm
-from .reference_selector import select_reference_set, build_reference_excerpts, reference_set_hash
+from .llm_client import customer_reply_llm_freeplay
+from .reference_selector import select_reference_set, reference_set_hash
 
 
 def load_pack(pack_dir: str) -> Dict[str, Any]:
@@ -41,7 +41,7 @@ def start_run(
     overrides: Dict[str, Any] | None = None,
     mode: str = "strict",
     llm_model: str = "gpt-5.2",
-    reference_k: int = 3,
+    reference_k: int = 0,
 ) -> Tuple[str, Dict[str, Any]]:
     overrides = overrides or {}
 
@@ -62,7 +62,7 @@ def start_run(
             "pack_hash": pack_hash,
             "overrides_hash": overrides_hash,
             "mode": mode,
-            "llm_model": llm_model if mode == "flavor" else "",
+            "llm_model": llm_model if mode in ["flavor", "freeplay"] else "",
         }
     )
 
@@ -80,7 +80,7 @@ def start_run(
     )
 
     ref_ids: List[str] = []
-    if mode == "flavor" and reference_k > 0:
+    if mode in ["flavor", "freeplay"] and reference_k > 0:
         ref_ids = select_reference_set(
             current_run_key=run_key,
             current_seed=seed,
@@ -111,16 +111,6 @@ def start_run(
         "reference_set": ref_ids,
         "reference_set_hash": ref_hash,
         "reference_k": reference_k,
-        # deterministic controller state for flavor mode
-        "controller_state": {
-            "revealed_budget": False,
-            "revealed_payment": False,
-            "revealed_features": False,
-            "revealed_down": False,
-            "revealed_trade": False,
-            "patience": 3,
-            "last_seller_norm": "",
-        },
     }
 
     save_run(run_id, payload)
@@ -136,85 +126,12 @@ def _cache_key(run_payload: Dict[str, Any], turn_index: int, seller_text: str) -
             "seller_hash": seller_hash,
             "reference_set_hash": run_payload.get("reference_set_hash", ""),
             "llm_model": run_payload.get("llm_model", ""),
+            "mode": run_payload.get("mode", ""),
         }
     )
 
 
-def _normalize(s: str) -> str:
-    return " ".join((s or "").lower().split())
-
-
-def _build_decision(run_payload: Dict[str, Any], seller_text: str) -> Dict[str, Any]:
-    """
-    Deterministic conversation controller.
-    It decides what can be revealed and what the customer should do this turn.
-    """
-    state = run_payload.get("controller_state") or {}
-    tags = _extract_keywords(seller_text)
-    seller_norm = _normalize(seller_text)
-
-    # repeated seller prompt
-    if seller_norm and seller_norm == state.get("last_seller_norm", ""):
-        state["patience"] = int(state.get("patience", 3)) - 1
-    else:
-        state["last_seller_norm"] = seller_norm
-
-    patience = int(state.get("patience", 3))
-
-    reveal: Dict[str, bool] = {
-        "budget_max_otd": False,
-        "payment_target_monthly": False,
-        "must_have_features": False,
-        "down_payment": False,
-        "trade_in_status": False,
-    }
-
-    intent = "respond_and_ask"
-    must_redirect = False
-
-    # if seller is off-topic (pitching random sports car etc)
-    off_topic = any(x in seller_norm for x in ["corvette", "ferrari", "lamborghini", "supercar"])
-    if off_topic and ("features" not in tags) and ("budget" not in tags) and ("payment" not in tags):
-        intent = "redirect_to_constraints"
-        must_redirect = True
-
-    # map seller asks to reveals
-    if "budget" in tags and not state.get("revealed_budget"):
-        reveal["budget_max_otd"] = True
-        state["revealed_budget"] = True
-
-    if "payment" in tags and not state.get("revealed_payment"):
-        reveal["payment_target_monthly"] = True
-        state["revealed_payment"] = True
-
-    if "features" in tags and not state.get("revealed_features"):
-        reveal["must_have_features"] = True
-        state["revealed_features"] = True
-
-    if "down_payment" in tags and not state.get("revealed_down"):
-        reveal["down_payment"] = True
-        state["revealed_down"] = True
-
-    if "trade_in" in tags and not state.get("revealed_trade"):
-        reveal["trade_in_status"] = True
-        state["revealed_trade"] = True
-
-    if patience <= 0:
-        intent = "end_pause"
-        must_redirect = False
-
-    run_payload["controller_state"] = state
-
-    return {
-        "intent": intent,
-        "reveal": reveal,
-        "patience": patience,
-        "must_redirect": must_redirect,
-        "seller_tags": tags,
-    }
-
-
-def _append_flavor_turn(run_payload: Dict[str, Any], seller_text: str) -> Dict[str, Any]:
+def _append_freeplay_turn(run_payload: Dict[str, Any], seller_text: str) -> Dict[str, Any]:
     session = run_payload["session"]
     turns = session.get("turns", [])
     turn_index = len(turns)
@@ -222,32 +139,25 @@ def _append_flavor_turn(run_payload: Dict[str, Any], seller_text: str) -> Dict[s
     cache: Dict[str, str] = run_payload.get("llm_cache") or {}
     ck = _cache_key(run_payload, turn_index, seller_text)
 
+    err: Optional[str] = None
     if ck in cache:
         customer_text = cache[ck]
-        err = None
     else:
-        decision = _build_decision(run_payload, seller_text)
-
-        ref_ids = run_payload.get("reference_set") or []
-        ref_excerpts = build_reference_excerpts(ref_ids, max_turns_per_run=3)
-
         prev_customer = ""
         if turns:
             prev_customer = str((turns[-1].get("customer") or "")).strip()
 
-        customer_text, err = customer_reply_llm(
+        customer_text, err = customer_reply_llm_freeplay(
             model=run_payload.get("llm_model", "gpt-5.2"),
             persona_prompt=run_payload["persona_prompt"],
             buyer_profile=run_payload["buyer_profile"],
             turns=turns,
             seller_message=seller_text,
-            reference_excerpts=ref_excerpts,
-            decision=decision,
             prev_customer_message=prev_customer,
         )
 
         if err:
-            # Deterministic fallback to strict step engine
+            # deterministic fallback to strict
             strict_turns: List[Turn] = [Turn(**t) for t in turns]
             ss = SessionState(
                 seed=session["seed"],
@@ -275,7 +185,7 @@ def _append_flavor_turn(run_payload: Dict[str, Any], seller_text: str) -> Dict[s
         run_payload["llm_cache"] = cache
 
     tags = _extract_keywords(seller_text)
-    extra_tags = ["llm_flavor_ctrl"]
+    extra_tags = ["llm_freeplay"]
     if err:
         extra_tags.append(f"llm_fallback:{err}")
 
@@ -288,16 +198,6 @@ def _append_flavor_turn(run_payload: Dict[str, Any], seller_text: str) -> Dict[s
         }
     )
 
-    lowered = customer_text.lower()
-    if "walk" in lowered or "pause here" in lowered:
-        session["outcome"] = "bad_exit"
-    elif ("appointment" in seller_text.lower()) or ("follow up" in seller_text.lower()):
-        if session.get("outcome") == "ongoing":
-            session["outcome"] = "good_exit"
-    elif ("deal" in seller_text.lower()) and (("out the door" in seller_text.lower()) or ("otd" in seller_text.lower())):
-        if session.get("outcome") == "ongoing":
-            session["outcome"] = "deal"
-
     session["turns"] = turns
     run_payload["session"] = session
     return run_payload
@@ -306,8 +206,8 @@ def _append_flavor_turn(run_payload: Dict[str, Any], seller_text: str) -> Dict[s
 def step_run(run_payload: Dict[str, Any], seller_text: str) -> Dict[str, Any]:
     mode = run_payload.get("mode", "strict")
 
-    if mode == "flavor":
-        run_payload = _append_flavor_turn(run_payload, seller_text)
+    if mode == "freeplay":
+        run_payload = _append_freeplay_turn(run_payload, seller_text)
         score = score_session(run_payload["session"])
         run_payload["score"] = score_to_dict(score)
         return run_payload
