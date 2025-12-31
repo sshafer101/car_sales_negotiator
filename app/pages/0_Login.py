@@ -16,7 +16,7 @@ with col1:
         if email.strip() and password.strip():
             st.session_state.user = {"email": email.strip()}
             st.success("Logged in.")
-            st.page_link("app/pages/1_Run_Sim.py", label="Go to Run Sim", icon="🧪", use_container_width=True)
+            st.page_link("pages/1_Run_Sim.py", label="Go to Run Sim", icon="🧪", use_container_width=True)
         else:
             st.error("Enter email and password.")
 
